@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+snapshots/*.json
+changelogs/*.json
+.DS_Store

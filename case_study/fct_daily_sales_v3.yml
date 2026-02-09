@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: fct_daily_sales
+    description: "Daily sales from transactions, Monday through Friday, 10 AM to 10 PM"
+    columns:
+      - name: sale_date
+        description: "The calendar date of aggregation. Weekdays only (Monday-Friday), business hours."
+        tests:
+          - not_null
+          - unique
+      - name: total_revenue
+        description: "Sum of all transaction amounts for the day during business hours, in USD"
+        tests:
+          - not_null
+      - name: total_orders
+        description: "Count of distinct orders placed during business hours (10 AM - 10 PM)"
+        tests:
+          - not_null
+      - name: avg_order_value
+        description: "Average revenue per order during business hours (total_revenue / total_orders)"
+        tests:
+          - not_null
+      - name: total_items_sold
+        description: "Count of all line items across all orders during business hours"
+        tests:
+          - not_null
+      - name: channel
+        description: "Sales channel: online or in-store (phone orders discontinued)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['online', 'in-store']
+      - name: business_hours_start
+        description: "Start of the business hours window: 10:00 AM local time"
+        tests:
+          - not_null
+      - name: business_hours_end
+        description: "End of the business hours window: 10:00 PM local time"
+        tests:
+          - not_null

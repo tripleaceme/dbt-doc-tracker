@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: fct_daily_sales
+    description: "Daily sales from all transactions, Monday through Friday, all hours"
+    columns:
+      - name: sale_date
+        description: "The calendar date of aggregation. Weekdays only (Monday-Friday)."
+        tests:
+          - not_null
+          - unique
+      - name: total_revenue
+        description: "Sum of all transaction amounts for the day, in USD"
+        tests:
+          - not_null
+      - name: total_orders
+        description: "Count of distinct orders placed on the date"
+        tests:
+          - not_null
+      - name: avg_order_value
+        description: "Average revenue per order (total_revenue / total_orders)"
+        tests:
+          - not_null
+      - name: total_items_sold
+        description: "Count of all line items across all orders for the day"
+        tests:
+          - not_null
+      - name: channel
+        description: "Sales channel: online or in-store (phone orders discontinued)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['online', 'in-store']
