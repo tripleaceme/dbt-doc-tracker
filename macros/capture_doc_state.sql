@@ -16,7 +16,7 @@
         {% set snapshot_rel = dbt_doc_tracker.get_snapshot_relation() %}
 
         {{ log("dbt_doc_tracker: Creating doc_snapshots table if not exists...", info=True) }}
-        {% call statement('create_table', fetch_result=False) %}
+        {% call statement('create_table', fetch_result=False, auto_begin=False) %}
             {{ dbt_doc_tracker.create_snapshot_table(snapshot_rel) }}
         {% endcall %}
 
@@ -115,6 +115,9 @@
 
                 {{ log("dbt_doc_tracker: Inserted batch " ~ loop.index ~ " (" ~ batch | length ~ " rows)", info=True) }}
             {% endfor %}
+
+            {#-- Explicitly commit — run-operation does not auto-commit --#}
+            {% do adapter.commit() %}
 
             {{ log("dbt_doc_tracker: Snapshot complete. " ~ entries | length ~ " entries captured.", info=True) }}
         {% else %}
