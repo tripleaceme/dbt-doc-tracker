@@ -5,27 +5,37 @@
 }}
 
 {#--
-    Current Documentation State: shows the latest snapshot only.
-    Useful for auditing documentation coverage across your dbt project.
+    Current Documentation State: derives the latest known state
+    from the doc_changelog table. Shows only entities that are
+    currently documented (excludes removed entries).
 --#}
 
-{% set snapshot_rel = dbt_doc_tracker.get_snapshot_relation() %}
+{% set changelog_rel = dbt_doc_tracker.get_changelog_relation() %}
 
-WITH latest_snapshot AS (
-    SELECT snapshot_id
-    FROM {{ snapshot_rel }}
-    ORDER BY captured_at DESC
-    LIMIT 1
+WITH ranked AS (
+    SELECT
+        entity_type,
+        entity_name,
+        field_name,
+        change_type,
+        new_description AS description,
+        captured_at,
+        invocation_id,
+        ROW_NUMBER() OVER (
+            PARTITION BY entity_type, entity_name, field_name
+            ORDER BY captured_at DESC
+        ) AS rn
+    FROM {{ changelog_rel }}
 )
 
 SELECT
-    s.snapshot_id,
-    s.captured_at,
-    s.entity_type,
-    s.entity_name,
-    s.field_name,
-    s.description,
-    s.invocation_id
-FROM {{ snapshot_rel }} s
-INNER JOIN latest_snapshot ls ON s.snapshot_id = ls.snapshot_id
-ORDER BY s.entity_type, s.entity_name, s.field_name
+    entity_type,
+    entity_name,
+    field_name,
+    description,
+    captured_at,
+    invocation_id
+FROM ranked
+WHERE rn = 1
+  AND change_type != 'removed'
+ORDER BY entity_type, entity_name, field_name

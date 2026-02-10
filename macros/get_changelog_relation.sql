@@ -1,6 +1,6 @@
-{% macro get_snapshot_relation() %}
+{% macro get_changelog_relation() %}
     {#--
-        Returns the fully-qualified relation for the doc_snapshots table.
+        Returns the fully-qualified relation for the doc_changelog table.
         Respects user-configured database/schema via vars,
         or defaults to target.database / target.schema.
     --#}
@@ -19,7 +19,7 @@
     {% set relation = adapter.get_relation(
         database=db,
         schema=schema,
-        identifier='doc_snapshots'
+        identifier='doc_changelog'
     ) %}
 
     {#-- If table doesn't exist yet, create a reference to it --#}
@@ -27,7 +27,7 @@
         {% set relation = api.Relation.create(
             database=db,
             schema=schema,
-            identifier='doc_snapshots'
+            identifier='doc_changelog'
         ) %}
     {% endif %}
 

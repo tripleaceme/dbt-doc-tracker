@@ -1,5 +1,5 @@
 name: 'dbt_doc_tracker'
-version: '1.0.0'
+version: '2.0.0'
 config-version: 2
 
 require-dbt-version: [">=1.6.0", "<2.0.0"]
@@ -8,7 +8,7 @@ macro-paths: ["macros"]
 model-paths: ["models"]
 
 vars:
-  # Override these in your dbt_project.yml to store doc snapshots
+  # Override these in your dbt_project.yml to store the doc_changelog table
   # in a custom database/schema. Defaults to target.database / target.schema.
   dbt_doc_tracker_database: null
   dbt_doc_tracker_schema: null

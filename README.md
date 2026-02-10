@@ -1,10 +1,10 @@
 # dbt Doc Tracker
 
-A dbt package that tracks documentation changes across your dbt project over time. Every time you capture a snapshot, the package records all model, source, and seed descriptions into a warehouse table. SQL views then surface what changed between snapshots — so you always have a versioned history of your documentation.
+A dbt package that detects and records documentation changes across your dbt project. Instead of storing full snapshots, it only records the diffs — when a description is added, modified, or removed. One lightweight table, minimal warehouse cost.
 
 ## The Problem
 
-When a column description changes from *"Daily sales, Monday through Sunday"* to *"Daily sales, Monday through Friday, 10 AM to 10 PM"*, there's no built-in way in dbt to see what it used to say. A new team member joining months later has no visibility into how or why documentation evolved.
+Documentation changes in dbt are invisible. When a column description changes, gets removed, or a new model goes undocumented, there's no built-in way to detect or track it. Git tracks source file changes, but it doesn't give you queryable, production-level visibility into what your documentation actually looks like over time.
 
 ## How It Works
 
@@ -12,7 +12,7 @@ When a column description changes from *"Daily sales, Monday through Sunday"* to
 dbt run-operation capture_doc_state
 ```
 
-This macro reads every model, source, and seed description from dbt's compiled graph and inserts them into a `doc_snapshots` table in your warehouse. Run it again after making documentation changes, and the `doc_changelog` view will show you exactly what changed.
+This macro reads every model, source, and seed description from dbt's compiled graph, compares it against the last known state in the `doc_changelog` table, and inserts only the changes. If nothing changed, nothing is written.
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -22,13 +22,13 @@ This macro reads every model, source, and seed description from dbt's compiled g
                        │ dbt run-operation capture_doc_state
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│  doc_snapshots table (append-only, in your warehouse)│
+│  doc_changelog table (stores only changes)          │
 └──────────────────────┬──────────────────────────────┘
                        │ dbt run --select dbt_doc_tracker
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│  doc_changelog      → diff of latest 2 snapshots    │
-│  doc_current_state  → latest snapshot only           │
+│  doc_current_state  → current docs derived from     │
+│                       changelog (view, zero storage) │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -39,7 +39,7 @@ Add to your `packages.yml`:
 ```yaml
 packages:
   - git: "https://github.com/tripleaceme/dbt-doc-tracker.git"
-    revision: v1.0.0
+    revision: v2.0.0
 ```
 
 Then run:
@@ -50,7 +50,7 @@ dbt deps
 
 ## Configuration
 
-By default, the package stores the `doc_snapshots` table and views in your target database and schema. To use a custom location, add to your `dbt_project.yml`:
+By default, the package stores the `doc_changelog` table and views in your target database and schema. To use a custom location, add to your `dbt_project.yml`:
 
 ```yaml
 vars:
@@ -66,33 +66,32 @@ vars:
 dbt run-operation capture_doc_state
 ```
 
-This creates the `doc_snapshots` table (if it doesn't exist) and inserts all current documentation as a new snapshot batch.
+On the first run, this creates the `doc_changelog` table and records all documented items as `added`. On subsequent runs, it detects and records only the changes.
 
-### 2. Build the changelog views
+### 2. Build the current state view
 
 ```bash
 dbt run --select dbt_doc_tracker
 ```
 
-This creates two views:
-- **`doc_changelog`** — shows differences between the two most recent snapshots
-- **`doc_current_state`** — shows the latest documentation snapshot
+This creates:
+- **`doc_current_state`** — a view showing the latest documentation for all entities, derived from the changelog
 
-### 3. Query your documentation changes
+### 3. Query your documentation
 
 ```sql
--- See all changes between the last two snapshots
-SELECT * FROM doc_changelog;
+-- See all documentation changes ever recorded
+SELECT * FROM doc_changelog ORDER BY captured_at DESC;
 
--- See only modifications (description text changed)
+-- See only the latest changes
+SELECT *
+FROM doc_changelog
+WHERE captured_at = (SELECT MAX(captured_at) FROM doc_changelog);
+
+-- See modifications (description text changed)
 SELECT *
 FROM doc_changelog
 WHERE change_type = 'modified';
-
--- See newly added documentation
-SELECT *
-FROM doc_changelog
-WHERE change_type = 'added';
 
 -- Audit current documentation coverage by resource type
 SELECT
@@ -115,9 +114,9 @@ models:
         description: "The calendar date of aggregation. Covers all 7 days of the week."
 ```
 
-You run `dbt run-operation capture_doc_state` to create the baseline.
+You run `dbt run-operation capture_doc_state` to create the baseline. Both entries are recorded as `added`.
 
-Later, a business requirement changes the scope to weekdays and business hours only:
+Later, a business requirement changes the scope:
 
 ```yaml
 models:
@@ -132,7 +131,8 @@ Run `dbt run-operation capture_doc_state` again, then query:
 
 ```sql
 SELECT change_type, entity_name, field_name, old_description, new_description
-FROM doc_changelog;
+FROM doc_changelog
+WHERE change_type = 'modified';
 ```
 
 | change_type | entity_name | field_name | old_description | new_description |
@@ -152,26 +152,46 @@ The package captures descriptions from:
 
 Jinja `{{ doc('block_name') }}` references are automatically resolved by dbt before the macro reads them.
 
+## Change Detection
+
+| Scenario | Result |
+|---|---|
+| First run (empty table) | All documented items recorded as `added` |
+| No changes since last run | Nothing written |
+| Description text modified | `modified` row with old and new descriptions |
+| Description removed or blanked | `removed` row |
+| Previously removed, now re-added | `added` row |
+
 ## Automated Capture (Optional)
 
-To automatically capture a snapshot after every `dbt run`, add an `on-run-end` hook to your `dbt_project.yml`:
+To automatically detect changes after every `dbt run`, add an `on-run-end` hook to your `dbt_project.yml`:
 
 ```yaml
 on-run-end:
   - "{{ dbt_doc_tracker.capture_doc_state() }}"
 ```
 
-## `doc_snapshots` Table Schema
+## `doc_changelog` Table Schema
 
 | Column | Type | Description |
 |---|---|---|
-| `snapshot_id` | STRING | Batch ID per capture run (timestamp-based) |
-| `captured_at` | TIMESTAMP | When the snapshot was taken |
+| `captured_at` | TIMESTAMP | When the change was detected |
 | `entity_type` | STRING | `model`, `source`, or `seed` |
 | `entity_name` | STRING | Entity name (e.g., `fct_daily_sales` or `source_name.table_name`) |
 | `field_name` | STRING | Column name, or `__description__` for entity-level docs |
-| `description` | STRING | The documentation text |
+| `change_type` | STRING | `added`, `modified`, or `removed` |
+| `old_description` | STRING | Previous description (NULL for added entries) |
+| `new_description` | STRING | Current description (NULL for removed entries) |
 | `invocation_id` | STRING | dbt invocation ID for traceability |
+
+## Migrating from v1.x
+
+If upgrading from v1.x, you need to clean up the old objects:
+
+1. Drop the old `doc_snapshots` table: `DROP TABLE IF EXISTS doc_snapshots;`
+2. Drop the old `doc_changelog` view: `DROP VIEW IF EXISTS doc_changelog;`
+3. Run `dbt run-operation capture_doc_state` to create the new `doc_changelog` table
+4. Run `dbt run --select dbt_doc_tracker` to recreate the `doc_current_state` view
 
 ## Requirements
 
