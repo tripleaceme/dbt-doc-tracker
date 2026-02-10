@@ -16,9 +16,10 @@
         {% set snapshot_rel = dbt_doc_tracker.get_snapshot_relation() %}
 
         {{ log("dbt_doc_tracker: Creating doc_snapshots table if not exists...", info=True) }}
-        {% call statement('create_table', fetch_result=False, auto_begin=False) %}
+        {% set create_sql %}
             {{ dbt_doc_tracker.create_snapshot_table(snapshot_rel) }}
-        {% endcall %}
+        {% endset %}
+        {% do run_query(create_sql) %}
 
         {#-- Step 2: Generate a snapshot batch ID --#}
         {% set snapshot_id = modules.datetime.datetime.utcnow().strftime('%Y-%m-%d_%H%M%S') %}
@@ -95,7 +96,7 @@
                 {% set batch_end = [batch_start + batch_size, entries | length] | min %}
                 {% set batch = entries[batch_start:batch_end] %}
 
-                {% call statement('insert_batch_' ~ loop.index, fetch_result=False) %}
+                {% set insert_sql %}
                     INSERT INTO {{ snapshot_rel }}
                         (snapshot_id, captured_at, entity_type, entity_name, field_name, description, invocation_id)
                     VALUES
@@ -111,13 +112,11 @@
                         )
                         {% if not loop.last %},{% endif %}
                     {% endfor %}
-                {% endcall %}
+                {% endset %}
+                {% do run_query(insert_sql) %}
 
                 {{ log("dbt_doc_tracker: Inserted batch " ~ loop.index ~ " (" ~ batch | length ~ " rows)", info=True) }}
             {% endfor %}
-
-            {#-- Explicitly commit — run-operation does not auto-commit --#}
-            {% do adapter.commit() %}
 
             {{ log("dbt_doc_tracker: Snapshot complete. " ~ entries | length ~ " entries captured.", info=True) }}
         {% else %}
