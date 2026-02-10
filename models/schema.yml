@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: doc_changelog
+    description: >
+      Shows documentation changes between the two most recent snapshots.
+      Each row represents one added, modified, or removed documentation entry.
+      Run 'dbt run-operation capture_doc_state' at least twice to see changes.
+    columns:
+      - name: change_type
+        description: "Type of change: 'added', 'modified', or 'removed'"
+      - name: entity_type
+        description: "The dbt resource type: 'model', 'source', or 'seed'"
+      - name: entity_name
+        description: "Name of the entity (e.g., 'fct_daily_sales' or 'hoodie_sales.orders')"
+      - name: field_name
+        description: "Column name, or '__description__' for entity-level documentation"
+      - name: old_description
+        description: "Previous description text (NULL for added entries)"
+      - name: new_description
+        description: "Current description text (NULL for removed entries)"
+      - name: current_snapshot_id
+        description: "Snapshot ID of the newer snapshot"
+      - name: previous_snapshot_id
+        description: "Snapshot ID of the older snapshot"
+      - name: captured_at
+        description: "Timestamp when the snapshot was captured"
+
+  - name: doc_current_state
+    description: >
+      Shows the current documentation state from the latest snapshot.
+      Useful for auditing documentation coverage across your dbt project.
+    columns:
+      - name: snapshot_id
+        description: "Batch identifier for the snapshot"
+      - name: captured_at
+        description: "Timestamp when the snapshot was captured"
+      - name: entity_type
+        description: "The dbt resource type: 'model', 'source', or 'seed'"
+      - name: entity_name
+        description: "Name of the entity"
+      - name: field_name
+        description: "Column name, or '__description__' for entity-level documentation"
+      - name: description
+        description: "The documentation text"
+      - name: invocation_id
+        description: "dbt invocation ID that created this snapshot"
