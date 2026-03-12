@@ -194,15 +194,6 @@ on-run-end:
 | `new_description` | STRING | Current description (NULL for removed entries) |
 | `invocation_id` | STRING | dbt invocation ID for traceability |
 
-## Migrating from v1.x
-
-If upgrading from v1.x, you need to clean up the old objects:
-
-1. Drop the old `doc_snapshots` table: `DROP TABLE IF EXISTS doc_snapshots;`
-2. Drop the old `doc_changelog` view: `DROP VIEW IF EXISTS doc_changelog;`
-3. Run `dbt run-operation capture_doc_state` to create the new `doc_changelog` table
-4. Run `dbt run --select dbt_doc_tracker` to recreate the `doc_current_state` view
-
 ## Requirements
 
 - dbt >= 1.6.0, < 2.0.0
